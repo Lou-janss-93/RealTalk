@@ -17,9 +17,18 @@ export default function RootLayout({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Only proceed if supabase is initialized
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     // Get initial user
     getCurrentUser().then(user => {
       setUser(user);
+      setLoading(false);
+    }).catch(() => {
+      setUser(null);
       setLoading(false);
     });
 
@@ -41,7 +50,7 @@ export default function RootLayout({
           <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-gray-600">Laden...</p>
+              <p className="text-gray-600">Loading...</p>
             </div>
           </div>
         </body>
