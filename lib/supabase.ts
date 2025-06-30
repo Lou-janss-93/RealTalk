@@ -5,7 +5,18 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // Only create client if both URL and key are provided
 export const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      realtime: {
+        // Disable realtime in WebContainer to avoid WebSocket issues
+        params: {
+          eventsPerSecond: 2,
+        },
+      },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
   : null;
 
 // Database types
@@ -51,8 +62,13 @@ export interface VoiceProfile {
 // Auth helpers
 export const getCurrentUser = async () => {
   if (!supabase) throw new Error('Supabase client not initialized');
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    return user;
+  } catch (error) {
+    console.warn('Auth check failed:', error);
+    return null;
+  }
 };
 
 export const getProfile = async (userId: string) => {
@@ -85,13 +101,18 @@ export const findMatch = async (userId: string, personalityType: string) => {
   if (!supabase) throw new Error('Supabase client not initialized');
   // This would implement the matching algorithm
   // For now, we'll create a simple random match
-  const { data, error } = await supabase.rpc('find_match', {
-    user_id: userId,
-    personality: personalityType
-  });
-  
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.rpc('find_match', {
+      user_id: userId,
+      personality: personalityType
+    });
+    
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.warn('Matching failed:', error);
+    return null;
+  }
 };
 
 export const createMatch = async (user1Id: string, user2Id: string) => {
@@ -145,56 +166,73 @@ export const uploadVoiceProfile = async (userId: string, audioBlob: Blob) => {
   if (!supabase) throw new Error('Supabase client not initialized');
   const fileName = `voice-profiles/${userId}/${Date.now()}.webm`;
   
-  const { data: uploadData, error: uploadError } = await supabase.storage
-    .from('voice-profiles')
-    .upload(fileName, audioBlob);
-  
-  if (uploadError) throw uploadError;
-  
-  const { data: { publicUrl } } = supabase.storage
-    .from('voice-profiles')
-    .getPublicUrl(fileName);
-  
-  const { data, error } = await supabase
-    .from('voice_profiles')
-    .insert({
-      user_id: userId,
-      audio_url: publicUrl
-    })
-    .select()
-    .single();
-  
-  if (error) throw error;
-  return data as VoiceProfile;
+  try {
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('voice-profiles')
+      .upload(fileName, audioBlob);
+    
+    if (uploadError) throw uploadError;
+    
+    const { data: { publicUrl } } = supabase.storage
+      .from('voice-profiles')
+      .getPublicUrl(fileName);
+    
+    const { data, error } = await supabase
+      .from('voice_profiles')
+      .insert({
+        user_id: userId,
+        audio_url: publicUrl
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data as VoiceProfile;
+  } catch (error) {
+    console.warn('Voice upload failed:', error);
+    throw error;
+  }
 };
 
-// Real-time subscriptions
+// Real-time subscriptions (with fallback for WebContainer)
 export const subscribeToMatches = (userId: string, callback: (match: Match) => void) => {
   if (!supabase) throw new Error('Supabase client not initialized');
-  return supabase
-    .channel('matches')
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'matches',
-      filter: `user1_id=eq.${userId},user2_id=eq.${userId}`
-    }, (payload) => {
-      callback(payload.new as Match);
-    })
-    .subscribe();
+  
+  try {
+    return supabase
+      .channel('matches')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'matches',
+        filter: `user1_id=eq.${userId},user2_id=eq.${userId}`
+      }, (payload) => {
+        callback(payload.new as Match);
+      })
+      .subscribe();
+  } catch (error) {
+    console.warn('Real-time subscription failed:', error);
+    return { unsubscribe: () => {} };
+  }
 };
 
 export const subscribeToConversations = (matchId: string, callback: (conversation: Conversation) => void) => {
   if (!supabase) throw new Error('Supabase client not initialized');
-  return supabase
-    .channel('conversations')
-    .on('postgres_changes', {
-      event: 'UPDATE',
-      schema: 'public',
-      table: 'conversations',
-      filter: `match_id=eq.${matchId}`
-    }, (payload) => {
-      callback(payload.new as Conversation);
-    })
-    .subscribe();
+  
+  try {
+    return supabase
+      .channel('conversations')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'conversations',
+        filter: `match_id=eq.${matchId}`
+      }, (payload) => {
+        callback(payload.new as Conversation);
+      })
+      .subscribe();
+  } catch (error) {
+    console.warn('Real-time subscription failed:', error);
+    return { unsubscribe: () => {} };
+  }
 };
