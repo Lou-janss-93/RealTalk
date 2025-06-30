@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageCircle, Clock, Users, TrendingUp, Calendar, Play } from 'lucide-react';
-import { supabase, getCurrentUser } from '@/lib/supabase';
+import { supabase, getCurrentUser, isDemoMode } from '@/lib/supabase';
 
 interface ConversationRecord {
   id: string;
@@ -34,6 +34,52 @@ export default function ConversationsPage() {
 
   const loadConversations = async () => {
     try {
+      if (isDemoMode) {
+        // Provide mock conversation data for demo mode
+        const mockConversations: ConversationRecord[] = [
+          {
+            id: 'demo-1',
+            match_id: 'match-demo-1',
+            started_at: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+            ended_at: new Date(Date.now() - 86400000 + 1800000).toISOString(), // 30 min duration
+            duration: 1800,
+            avg_drift_level: 25,
+            quality_score: 85,
+            partner_name: 'Demo Partner',
+            partner_avatar: undefined
+          },
+          {
+            id: 'demo-2',
+            match_id: 'match-demo-2',
+            started_at: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+            ended_at: new Date(Date.now() - 172800000 + 2400000).toISOString(), // 40 min duration
+            duration: 2400,
+            avg_drift_level: 45,
+            quality_score: 72,
+            partner_name: 'Another Demo User',
+            partner_avatar: undefined
+          }
+        ];
+
+        setConversations(mockConversations);
+
+        // Calculate demo stats
+        const totalConversations = mockConversations.length;
+        const totalDuration = mockConversations.reduce((sum, conv) => sum + (conv.duration || 0), 0);
+        const avgDriftLevel = mockConversations.reduce((sum, conv) => sum + (conv.avg_drift_level || 0), 0) / totalConversations || 0;
+        const avgQualityScore = mockConversations.reduce((sum, conv) => sum + (conv.quality_score || 0), 0) / totalConversations || 0;
+
+        setStats({
+          totalConversations,
+          totalDuration,
+          avgDriftLevel,
+          avgQualityScore
+        });
+
+        setLoading(false);
+        return;
+      }
+
       const user = await getCurrentUser();
       if (!user) {
         router.push('/auth/login');
@@ -41,7 +87,7 @@ export default function ConversationsPage() {
       }
 
       // Get conversations from matches where user participated
-      const { data: conversationsData, error } = await supabase
+      const { data: conversationsData, error } = await supabase!
         .from('conversations')
         .select(`
           *,
