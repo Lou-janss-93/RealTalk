@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, Users, ArrowLeft } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, demoSignIn, isDemoMode, getProfile } from '@/lib/supabase';
 import { Language, useTranslation, getStoredLanguage } from '@/lib/i18n';
 import LanguageSelector from '@/components/LanguageSelector';
 
@@ -28,25 +28,35 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
+      if (isDemoMode) {
+        // Demo mode login
+        const { user } = await demoSignIn(email, password);
+        
         // Check if user has completed onboarding
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('personality_type')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profile?.personality_type) {
+        const personality = localStorage.getItem('userPersonality');
+        if (personality) {
           router.push('/dashboard');
         } else {
           router.push('/onboarding');
+        }
+      } else {
+        // Real Supabase login
+        const { data, error } = await supabase!.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+          // Check if user has completed onboarding
+          const profile = await getProfile(data.user.id);
+
+          if (profile?.personality_type) {
+            router.push('/dashboard');
+          } else {
+            router.push('/onboarding');
+          }
         }
       }
     } catch (error: any) {
@@ -89,6 +99,13 @@ export default function LoginPage() {
           <p className="text-gray-600">
             {t.auth.loginToContinue}
           </p>
+          {isDemoMode && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-sm text-blue-800">
+                <strong>Demo Mode:</strong> Use any email/password to login and explore the platform.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Login Form */}
@@ -154,14 +171,16 @@ export default function LoginPage() {
             </div>
 
             {/* Forgot Password */}
-            <div className="text-right">
-              <Link 
-                href="/auth/forgot-password"
-                className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
-              >
-                {t.auth.forgotPassword}
-              </Link>
-            </div>
+            {!isDemoMode && (
+              <div className="text-right">
+                <Link 
+                  href="/auth/forgot-password"
+                  className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
+                >
+                  {t.auth.forgotPassword}
+                </Link>
+              </div>
+            )}
 
             {/* Submit Button */}
             <button

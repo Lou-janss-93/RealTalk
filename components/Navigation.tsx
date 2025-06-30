@@ -15,7 +15,7 @@ import {
   Mic,
   Bell
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, demoSignOut, isDemoMode } from '@/lib/supabase';
 import { Language, useTranslation, getStoredLanguage } from '@/lib/i18n';
 import LanguageSelector from './LanguageSelector';
 
@@ -42,7 +42,11 @@ export default function Navigation({ user }: NavigationProps) {
 
   const handleSignOut = async () => {
     try {
-      await supabase.auth.signOut();
+      if (isDemoMode) {
+        await demoSignOut();
+      } else {
+        await supabase?.auth.signOut();
+      }
       localStorage.clear();
       router.push('/');
     } catch (error) {
@@ -71,6 +75,11 @@ export default function Navigation({ user }: NavigationProps) {
                 <Users className="w-6 h-6 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">RealTalk</span>
+              {isDemoMode && (
+                <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">
+                  Demo
+                </span>
+              )}
             </Link>
 
             {/* Desktop Menu */}
@@ -120,7 +129,7 @@ export default function Navigation({ user }: NavigationProps) {
                     <User className="w-4 h-4 text-white" />
                   </div>
                   <span className="hidden md:block text-sm font-medium text-gray-700">
-                    {user?.email || 'User'}
+                    {user?.email || 'Demo User'}
                   </span>
                 </button>
 

@@ -5,6 +5,7 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   images: { unoptimized: true },
+  trailingSlash: true,
   webpack: (config, { isServer }) => {
     // Ignore optional WebSocket dependencies that cause warnings in WebContainer
     config.externals = config.externals || [];

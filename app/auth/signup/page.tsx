@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, Users, ArrowLeft, User } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase, demoSignUp, isDemoMode } from '@/lib/supabase';
 import { Language, useTranslation, getStoredLanguage } from '@/lib/i18n';
 import LanguageSelector from '@/components/LanguageSelector';
 
@@ -53,34 +53,41 @@ export default function SignUpPage() {
     }
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            full_name: formData.fullName,
-          }
-        }
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        // Create profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email: formData.email,
-            full_name: formData.fullName,
-          });
-
-        if (profileError) {
-          console.error('Profile creation error:', profileError);
-        }
-
-        // Redirect to onboarding
+      if (isDemoMode) {
+        // Demo mode signup
+        await demoSignUp(formData.email, formData.password, formData.fullName);
         router.push('/onboarding');
+      } else {
+        // Real Supabase signup
+        const { data, error } = await supabase!.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              full_name: formData.fullName,
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+          // Create profile
+          const { error: profileError } = await supabase!
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              email: formData.email,
+              full_name: formData.fullName,
+            });
+
+          if (profileError) {
+            console.error('Profile creation error:', profileError);
+          }
+
+          // Redirect to onboarding
+          router.push('/onboarding');
+        }
       }
     } catch (error: any) {
       setError(error.message || (language === 'en' 
@@ -122,6 +129,13 @@ export default function SignUpPage() {
           <p className="text-gray-600">
             {t.auth.startJourney}
           </p>
+          {isDemoMode && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-sm text-blue-800">
+                <strong>Demo Mode:</strong> No database required - your data is stored locally for this demo.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Sign Up Form */}

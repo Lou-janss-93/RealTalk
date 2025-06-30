@@ -3,7 +3,7 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
 import { useEffect, useState } from 'react';
-import { supabase, getCurrentUser } from '@/lib/supabase';
+import { getCurrentUser, isDemoMode, demoSignOut } from '@/lib/supabase';
 import Navigation from '@/components/Navigation';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -17,12 +17,6 @@ export default function RootLayout({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Only proceed if supabase is initialized
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
     // Get initial user
     getCurrentUser().then(user => {
       setUser(user);
@@ -32,15 +26,20 @@ export default function RootLayout({
       setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
+    if (!isDemoMode) {
+      // Only set up auth listener if not in demo mode
+      const { supabase } = require('@/lib/supabase');
+      if (supabase) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event: string, session: any) => {
+            setUser(session?.user ?? null);
+            setLoading(false);
+          }
+        );
 
-    return () => subscription.unsubscribe();
+        return () => subscription.unsubscribe();
+      }
+    }
   }, []);
 
   if (loading) {
@@ -51,6 +50,9 @@ export default function RootLayout({
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
               <p className="text-gray-600">Loading...</p>
+              {isDemoMode && (
+                <p className="text-sm text-blue-600 mt-2">Demo Mode Active</p>
+              )}
             </div>
           </div>
         </body>

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
+// For demo mode, we'll use mock data when Supabase isn't available
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
@@ -59,9 +60,28 @@ export interface VoiceProfile {
   created_at: string;
 }
 
+// Demo mode helpers - use localStorage when Supabase isn't available
+const DEMO_MODE = !supabase;
+
+// Mock user for demo
+const createMockUser = (email: string, personality: string) => ({
+  id: `demo_${Date.now()}`,
+  email,
+  created_at: new Date().toISOString(),
+  app_metadata: {},
+  user_metadata: { personality_type: personality }
+});
+
 // Auth helpers
 export const getCurrentUser = async () => {
-  if (!supabase) throw new Error('Supabase client not initialized');
+  if (DEMO_MODE) {
+    // Return mock user from localStorage
+    const demoUser = localStorage.getItem('demoUser');
+    return demoUser ? JSON.parse(demoUser) : null;
+  }
+
+  if (!supabase) return null;
+  
   try {
     const { data: { user } } = await supabase.auth.getUser();
     return user;
@@ -72,6 +92,27 @@ export const getCurrentUser = async () => {
 };
 
 export const getProfile = async (userId: string) => {
+  if (DEMO_MODE) {
+    // Return mock profile from localStorage
+    const demoProfile = localStorage.getItem('demoProfile');
+    if (demoProfile) {
+      return JSON.parse(demoProfile);
+    }
+    
+    // Create default demo profile
+    const personality = localStorage.getItem('userPersonality') || 'real-me';
+    const mockProfile = {
+      id: userId,
+      email: 'demo@realtalk.com',
+      full_name: 'Demo User',
+      personality_type: personality,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    localStorage.setItem('demoProfile', JSON.stringify(mockProfile));
+    return mockProfile;
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   const { data, error } = await supabase
     .from('profiles')
@@ -84,6 +125,14 @@ export const getProfile = async (userId: string) => {
 };
 
 export const updateProfile = async (userId: string, updates: Partial<Profile>) => {
+  if (DEMO_MODE) {
+    // Update mock profile in localStorage
+    const currentProfile = await getProfile(userId);
+    const updatedProfile = { ...currentProfile, ...updates, updated_at: new Date().toISOString() };
+    localStorage.setItem('demoProfile', JSON.stringify(updatedProfile));
+    return updatedProfile;
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   const { data, error } = await supabase
     .from('profiles')
@@ -96,11 +145,68 @@ export const updateProfile = async (userId: string, updates: Partial<Profile>) =
   return data as Profile;
 };
 
+// Demo authentication functions
+export const demoSignUp = async (email: string, password: string, fullName: string) => {
+  if (!DEMO_MODE) throw new Error('Demo mode not active');
+  
+  const personality = localStorage.getItem('userPersonality') || 'real-me';
+  const mockUser = createMockUser(email, personality);
+  const mockProfile = {
+    id: mockUser.id,
+    email,
+    full_name: fullName,
+    personality_type: personality,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  localStorage.setItem('demoUser', JSON.stringify(mockUser));
+  localStorage.setItem('demoProfile', JSON.stringify(mockProfile));
+  
+  return { user: mockUser, profile: mockProfile };
+};
+
+export const demoSignIn = async (email: string, password: string) => {
+  if (!DEMO_MODE) throw new Error('Demo mode not active');
+  
+  // For demo, accept any email/password
+  const personality = localStorage.getItem('userPersonality') || 'real-me';
+  const mockUser = createMockUser(email, personality);
+  const mockProfile = {
+    id: mockUser.id,
+    email,
+    full_name: 'Demo User',
+    personality_type: personality,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  localStorage.setItem('demoUser', JSON.stringify(mockUser));
+  localStorage.setItem('demoProfile', JSON.stringify(mockProfile));
+  
+  return { user: mockUser, profile: mockProfile };
+};
+
+export const demoSignOut = async () => {
+  localStorage.removeItem('demoUser');
+  localStorage.removeItem('demoProfile');
+  localStorage.removeItem('userPersonality');
+};
+
 // Matching helpers
 export const findMatch = async (userId: string, personalityType: string) => {
+  if (DEMO_MODE) {
+    // Return mock match for demo
+    return {
+      id: 'demo_match_' + Date.now(),
+      user_id: 'demo_partner_' + Date.now(),
+      username: 'Alex',
+      personality: personalityType,
+      avatar: 'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face'
+    };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
-  // This would implement the matching algorithm
-  // For now, we'll create a simple random match
   try {
     const { data, error } = await supabase.rpc('find_match', {
       user_id: userId,
@@ -116,6 +222,17 @@ export const findMatch = async (userId: string, personalityType: string) => {
 };
 
 export const createMatch = async (user1Id: string, user2Id: string) => {
+  if (DEMO_MODE) {
+    // Return mock match
+    return {
+      id: 'demo_match_' + Date.now(),
+      user1_id: user1Id,
+      user2_id: user2Id,
+      status: 'pending' as const,
+      created_at: new Date().toISOString()
+    };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   const { data, error } = await supabase
     .from('matches')
@@ -133,6 +250,16 @@ export const createMatch = async (user1Id: string, user2Id: string) => {
 
 // Conversation helpers
 export const createConversation = async (matchId: string) => {
+  if (DEMO_MODE) {
+    // Return mock conversation
+    return {
+      id: 'demo_conversation_' + Date.now(),
+      match_id: matchId,
+      started_at: new Date().toISOString(),
+      feedback_events: []
+    };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   const { data, error } = await supabase
     .from('conversations')
@@ -149,6 +276,11 @@ export const createConversation = async (matchId: string) => {
 };
 
 export const updateConversation = async (conversationId: string, updates: Partial<Conversation>) => {
+  if (DEMO_MODE) {
+    // Mock update for demo
+    return { id: conversationId, ...updates };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   const { data, error } = await supabase
     .from('conversations')
@@ -163,6 +295,17 @@ export const updateConversation = async (conversationId: string, updates: Partia
 
 // Voice profile helpers
 export const uploadVoiceProfile = async (userId: string, audioBlob: Blob) => {
+  if (DEMO_MODE) {
+    // Mock voice profile for demo
+    const audioUrl = URL.createObjectURL(audioBlob);
+    return {
+      id: 'demo_voice_' + Date.now(),
+      user_id: userId,
+      audio_url: audioUrl,
+      created_at: new Date().toISOString()
+    };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   const fileName = `voice-profiles/${userId}/${Date.now()}.webm`;
   
@@ -196,6 +339,11 @@ export const uploadVoiceProfile = async (userId: string, audioBlob: Blob) => {
 
 // Real-time subscriptions (with fallback for WebContainer)
 export const subscribeToMatches = (userId: string, callback: (match: Match) => void) => {
+  if (DEMO_MODE) {
+    // Mock subscription for demo
+    return { unsubscribe: () => {} };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   
   try {
@@ -217,6 +365,11 @@ export const subscribeToMatches = (userId: string, callback: (match: Match) => v
 };
 
 export const subscribeToConversations = (matchId: string, callback: (conversation: Conversation) => void) => {
+  if (DEMO_MODE) {
+    // Mock subscription for demo
+    return { unsubscribe: () => {} };
+  }
+
   if (!supabase) throw new Error('Supabase client not initialized');
   
   try {
@@ -236,3 +389,6 @@ export const subscribeToConversations = (matchId: string, callback: (conversatio
     return { unsubscribe: () => {} };
   }
 };
+
+// Export demo mode flag for components to use
+export const isDemoMode = DEMO_MODE;
